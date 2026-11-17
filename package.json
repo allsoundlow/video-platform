@@ -1,0 +1,16 @@
+{
+  "name": "gameshub",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "type": "module",
+  "devDependencies": {
+    "@types/node": "^26.6.6"
+  },
+  "dependencies": {
+    "close-with-grace": "^2.5.0",
+    "fastify": "^5.12.8",
+    "fastify-type-provider-zod": "^7.0.0",
+    "zod": "^4.6.7"
+  }
+}
