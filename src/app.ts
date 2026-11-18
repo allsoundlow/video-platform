@@ -1,10 +1,12 @@
 import Fastify from 'fastify';
 import { z } from 'zod';
+import { createHash } from 'node:crypto';
 import {
   serializerCompiler,
   validatorCompiler,
   type ZodTypeProvider,
 } from 'fastify-type-provider-zod';
+import { create } from 'node:domain';
 
 class FileUploadError extends Error {
   closeConnection: boolean;
@@ -27,7 +29,7 @@ function getExtension(buff: Buffer) {
 
 const HEADER_SIZE = 8;
 
-const VideoUploadBody = z.object({ extension: z.enum(['webm', 'mp4']) });
+const VideoUploadBody = z.object({ extension: z.enum(['webm', 'mp4']), hash: z.hex() });
 type VideoUploadBody = z.infer<typeof VideoUploadBody>;
 
 export async function buildApp() {
@@ -57,6 +59,7 @@ export async function buildApp() {
     let extension: string | undefined;
     const header = Buffer.alloc(HEADER_SIZE);
     let copied = 0;
+    let hash = createHash('sha256');
 
     function finish(error: null | Error, data?: unknown) {
       if (finished) return;
@@ -64,7 +67,9 @@ export async function buildApp() {
       done(error, data);
     }
     payload.on('data', (data: Buffer) => {
-      if (finished || extension) return;
+      if (finished) return;
+      hash.update(data);
+      if (extension) return;
       copied += data.copy(header, copied, 0, HEADER_SIZE - copied);
       if (copied < HEADER_SIZE) return;
       try {
@@ -75,8 +80,8 @@ export async function buildApp() {
     });
 
     payload.on('end', () => {
-      if (!extension) finish(new FileUploadError('File is too short'));
-      finish(null, { extension });
+      if (!extension) return finish(new FileUploadError('File is too short'));
+      finish(null, { extension, hash: hash.digest('hex') });
     });
 
     payload.on('error', (err) => finish(err));
@@ -91,12 +96,12 @@ export async function buildApp() {
     {
       schema: {
         body: VideoUploadBody,
-        response: { 200: z.object({ extension: z.enum(['webm', 'mp4']) }) },
+        response: { 200: z.object({ extension: z.enum(['webm', 'mp4']), hash: z.hex() }) },
       },
     },
     async (req, res) => {
-      const { extension } = req.body;
-      res.status(200).send({ extension });
+      const { extension, hash } = req.body;
+      res.status(200).send({ extension, hash });
     },
   );
 
